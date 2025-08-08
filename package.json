@@ -1,0 +1,31 @@
+{
+    "name": "simple-cloud-run-service",
+    "version": "1.0.0",
+    "description": "A simple Node.js service for Google Cloud Run",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "nodemon server.js"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.17.0",
+        "cors": "^2.8.5",
+        "express": "^4.21.2",
+        "google-auth-library": "^10.2.0",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.1"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "keywords": [
+        "nodejs",
+        "express",
+        "cloud-run",
+        "google-cloud"
+    ],
+    "author": "",
+    "license": "MIT"
+}
