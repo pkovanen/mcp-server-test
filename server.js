@@ -13,7 +13,7 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
 const API_KEY = process.env.MCP_API_KEY;
-const FORCE_JSON = process.env.MCP_FORCE_JSON === '1'; // jos haluat pakottaa POST-vastaukset JSONiksi
+const FORCE_JSON = process.env.MCP_FORCE_JSON === '1'; // if you want to force POST responses to JSON
 
 // ====== OAUTH ======
 const SCOPES = ['https://www.googleapis.com/auth/tasks'];
@@ -23,22 +23,22 @@ const oauth2Client = new OAuth2Client({
     redirectUri: REDIRECT_URI,
 });
 
-// POC: tokenit muistissa
+// POC: tokens in memory
 let savedTokens = null;
 
 // ---- Body parsing ----
-// Muualle kuin /mcp:lle normaali JSON-parseri
+// Normal JSON parser for everything except /mcp
 app.use((req, res, next) => {
     if (req.path.startsWith('/mcp')) return next();
     return express.json()(req, res, next);
 });
-// /mcp:lle rajattu JSON-parsi
+// Limited JSON parsing for /mcp
 app.use('/mcp', express.json({ limit: '1mb', type: ['application/json', 'application/json; charset=utf-8'] }));
 
 // ---- CORS ----
 app.use(
     cors({
-        origin: '*', // rajaa kun kaikki toimii (esim. ['https://claude.ai'])
+        origin: '*', // restrict when everything works (e.g. ['https://claude.ai'])
         methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Mcp-Session-Id', 'mcp-session-id', 'X-API-Key', 'Authorization'],
         exposedHeaders: ['Mcp-Session-Id'],
@@ -46,7 +46,7 @@ app.use(
 );
 app.options('*', cors());
 
-// Kevyt loki /mcp:lle
+// Light logging for /mcp
 app.use((req, _res, next) => {
     if (req.path.startsWith('/mcp')) {
         console.log('MCP hit', {
@@ -62,7 +62,7 @@ app.use((req, _res, next) => {
     next();
 });
 
-// ---- API key -suojaus (/mcp ja /tasks) ----
+// ---- API key protection (/mcp and /tasks) ----
 function requireKey(req, res, next) {
     if (req.method === 'OPTIONS') return next();
     const q = req.query.key;
@@ -111,7 +111,7 @@ app.get('/oauth2/callback', async (req, res) => {
         const { tokens } = await oauth2Client.getToken(code);
         savedTokens = tokens;
         oauth2Client.setCredentials(tokens);
-        res.send('OAuth OK – käy nyt /tasks (avaimen kanssa)');
+        res.send('OAuth OK – now go to /tasks (with key)');
     } catch (e) {
         const status = e.response?.status;
         const data = e.response?.data;
@@ -120,7 +120,7 @@ app.get('/oauth2/callback', async (req, res) => {
     }
 });
 
-// ====== GOOGLE TASKS PIKATESTI ======
+// ====== GOOGLE TASKS QUICK TEST ======
 app.use('/tasks', requireKey);
 
 app.get('/tasks', async (req, res) => {
@@ -134,7 +134,7 @@ app.get('/tasks', async (req, res) => {
 
         const authHeader = { Authorization: `Bearer ${token}` };
 
-        // Listat
+        // Lists
         const listsResp = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', { headers: authHeader });
         const lists = await listsResp.json();
         if (!lists.items || lists.items.length === 0) {
@@ -142,7 +142,7 @@ app.get('/tasks', async (req, res) => {
         }
         const list = lists.items[0];
 
-        // Tehtävät
+        // Tasks
         const tasksResp = await fetch(
             `https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=true`,
             { headers: authHeader }
@@ -180,12 +180,12 @@ async function initMcpServer() {
             const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js');
             const { StreamableHTTPServerTransport } = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
             const { isInitializeRequest } = await import('@modelcontextprotocol/sdk/types.js');
-            // HUOM: käytä Zod v3
+            // NOTE: use Zod v3
             const { z } = await import('zod');
 
             const server = new McpServer({ name: 'google-tasks-mcp', version: '0.1.0' });
 
-            // --- apurit ---
+            // --- helpers ---
             async function authHeader() {
                 if (!savedTokens) return { headers: null, error: 'Not authorized. Visit /oauth2/start first.' };
                 oauth2Client.setCredentials(savedTokens);
@@ -209,12 +209,12 @@ async function initMcpServer() {
                 'search',
                 {
                     title: 'Search tasks',
-                    description: 'Hae tehtäviä nimen/tilan/eräpäivän perusteella kaikista listoista tai yhdestä listasta.',
+                    description: 'Search tasks by name/status/due date from all lists or a specific list.',
                     // SDK-dokumentin mukainen "plain object" -tyyli (Zod v3)
                     inputSchema: {
-                        query: z.string().describe('Tekstihaku tehtävän otsikosta').optional(),
+                        query: z.string().describe('Text search in task title').optional(),
                         listId: z.string().describe('Task list ID').optional(),
-                        showCompleted: z.boolean().optional(), // defaultit hoidetaan handlerissa
+                        showCompleted: z.boolean().optional(), // defaults handled in handler
                     },
                 },
                 async ({ query, listId, showCompleted }) => {
@@ -245,7 +245,7 @@ async function initMcpServer() {
                 'fetch',
                 {
                     title: 'Fetch a task',
-                    description: 'Hae yhden tehtävän tarkemmat tiedot.',
+                    description: 'Fetch detailed information for a single task.',
                     inputSchema: {
                         listId: z.string(),
                         taskId: z.string(),
@@ -266,12 +266,12 @@ async function initMcpServer() {
                 'create_task',
                 {
                     title: 'Create a task',
-                    description: 'Luo uusi tehtävä annettuun listaan (tai ensimmäiseen listaan, jos listId puuttuu).',
+                    description: 'Create a new task in the specified list (or the first list if listId is missing).',
                     inputSchema: {
                         listId: z.string().optional(),
                         title: z.string(),
                         notes: z.string().optional(),
-                        due: z.string().describe('ISO8601, esim. 2025-08-01T10:00:00.000Z').optional(),
+                        due: z.string().describe('ISO8601, e.g. 2025-08-01T10:00:00.000Z').optional(),
                     },
                 },
                 async ({ listId, title, notes, due }) => {
@@ -300,17 +300,17 @@ async function initMcpServer() {
     return mcpInitPromise;
 }
 
-// Health MCP:lle (avaimen takana)
+// Health for MCP (behind key)
 app.get('/mcp/health', requireKey, (req, res) => {
     res.json({ ok: true, name: 'google-tasks-mcp', version: '0.1.0' });
 });
 
-// MCP reitit: session-malli (POST init, GET/DELETE ylläpito)
+// MCP routes: session model (POST init, GET/DELETE maintenance)
 app.post('/mcp', requireKey, async (req, res) => {
     try {
         const { server, StreamableHTTPServerTransport, isInitializeRequest } = await initMcpServer();
 
-        // Yhteensopivuus: varmista Accept
+        // Compatibility: ensure Accept
         const acc = (req.headers['accept'] || '').toLowerCase();
         if (FORCE_JSON) {
             req.headers['accept'] = 'application/json';
@@ -386,7 +386,7 @@ const handleSessionReq = async (req, res) => {
 app.get('/mcp', requireKey, handleSessionReq);
 app.delete('/mcp', requireKey, handleSessionReq);
 
-// ====== MUUT REITIT ======
+// ====== OTHER ROUTES ======
 app.get('/', (req, res) => {
     res.json({
         message: 'Hello from Google Cloud Run!',
@@ -404,7 +404,7 @@ app.get('/api/hello', (req, res) => {
     res.json({ message: `Hello, ${name}!`, timestamp: new Date().toISOString() });
 });
 
-// ====== VIRHEKÄSITTELY ======
+// ====== ERROR HANDLING ======
 app.use((err, req, res, _next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Something went wrong!', message: err.message });
