@@ -210,7 +210,7 @@ async function initMcpServer() {
                 {
                     title: 'Search tasks',
                     description: 'Search tasks by name/status/due date from all lists or a specific list.',
-                    // SDK-dokumentin mukainen "plain object" -tyyli (Zod v3)
+                    // SDK documentation compliant "plain object" style (Zod v3)
                     inputSchema: {
                         query: z.string().describe('Text search in task title').optional(),
                         listId: z.string().describe('Task list ID').optional(),
